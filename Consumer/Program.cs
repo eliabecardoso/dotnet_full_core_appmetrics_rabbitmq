@@ -1,7 +1,6 @@
-﻿using AppOwinAppMetrics.Middlewares.Metrics.DI;
-using AppOwinAppMetrics.Middlewares.Metrics.Helper;
-using Newtonsoft.Json;
-using RabbitMQ.Client.Events;
+﻿using Consumer.DI;
+using Consumer.Helper;
+using Metrics.Service;
 using System;
 using System.Text;
 using Unity;
@@ -12,54 +11,62 @@ namespace Consumer
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Console.WriteLine("Waiting data. (Press any key for exit)");
 
             var container = UnityConfig.GetMainContainer();
             var rabbitMQHelper = container.Resolve<IRabbitMQHelper>();
+
+            var requestService = container.Resolve<IRequestMetricsService>();
+            var applicationService = container.Resolve<IApplicationMetricsService>();
 
 
             try
             {
                 using (var connection = rabbitMQHelper.CreateConnection(rabbitMQHelper.GetConnectionFactory()))
+                using (var channel = connection.CreateModel())
                 {
-                    rabbitMQHelper.CreateQueue("RequestMetrics", connection);
+                    rabbitMQHelper.CreateQueue("RequestMetrics", channel);
 
-                    var consumerRequest = rabbitMQHelper.CreateConsumer(connection);
+                    var consumerRequest = rabbitMQHelper.CreateConsumer(channel);
 
                     consumerRequest.Received += (model, ea) =>
-                        {
-                            var body = ea.Body;
+                    {
+                        var body = ea.Body;
 
-                            var message = Encoding.UTF8.GetString(body);
+                        var message = Encoding.UTF8.GetString(body);
 
-                            //JsonConvert.DeserializeObject<ApplicationMetricsDataStore>(message);
+                        requestService.Store(message);
 
-                            Console.WriteLine($"[x] Received Request \n {message}");
-                        };
+                        Console.WriteLine($"[x] Received Request {ea.RoutingKey}");
+                    };
 
-                        rabbitMQHelper.ReceiveMessageFromQueue("RequestMetrics", consumerRequest, connection);
+                    rabbitMQHelper.ReceiveMessageFromQueue("RequestMetrics", consumerRequest, channel);
 
                     //
 
-                    rabbitMQHelper.CreateQueue("ApplicationMetrics", connection);
+                    rabbitMQHelper.CreateQueue("ApplicationMetrics", channel);
 
-                    var consumerApplication = rabbitMQHelper.CreateConsumer(connection);
+                    var consumerApplication = rabbitMQHelper.CreateConsumer(channel);
 
-                        consumerApplication.Received += (model, ea) =>
-                        {
-                            var body = ea.Body;
+                    consumerApplication.Received += (model, ea) =>
+                    {
+                        var body = ea.Body;
 
-                            var message = Encoding.UTF8.GetString(body);
+                        var message = Encoding.UTF8.GetString(body);
 
-                            //JsonConvert.DeserializeObject<ApplicationMetricsDataStore>(message);
+                        applicationService.Store(message);
 
-                            Console.WriteLine($"[x] Received Application \n {message}");
-                        };
+                        Console.WriteLine($"[x] Received {ea.RoutingKey}");
+                    };
 
-                        rabbitMQHelper.ReceiveMessageFromQueue("ApplicationMetrics", consumerApplication, connection);
-                    
+                    rabbitMQHelper.ReceiveMessageFromQueue("ApplicationMetrics", consumerApplication, channel);
+
+
+                    Console.ReadKey();
+                    Console.WriteLine("you sure that? (any key)");
+                    Console.ReadKey();
+
                 }
-
             }
             catch (Exception ex)
             {
