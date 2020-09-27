@@ -1,1 +1,1 @@
-### App Metrics Handle with RabbitMQ(Colect) and ElasticSearch(Store)
+### WemApp Backend Metrics Handle - RabbitMQ(Metrics Receiver) and ElasticSearch(Storage)
